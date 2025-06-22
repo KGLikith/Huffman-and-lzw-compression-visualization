@@ -110,10 +110,8 @@ export function generateHuffmanCodes(
       return;
     }
 
-    // left => 0
     traverse(node.left, code + "0");
 
-    // right => 1
     traverse(node.right, code + "1");
   }
 
@@ -164,3 +162,4 @@ export const downloadAsFile = (filename: string, content: string) => {
   document.body.appendChild(element); // Required for Firefox
   element.click();
 };
+

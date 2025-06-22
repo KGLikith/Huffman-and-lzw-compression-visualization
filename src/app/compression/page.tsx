@@ -17,7 +17,6 @@ import { HuffmanVisualizer } from "@/components/huffman/visualiser"
 import { toast } from "sonner"
 import { LZWVisualizer } from "@/components/lzw/visualizer"
 
-// Sample inputs optimized for LZW compression
 const sampleInputs = {
   simple: "AABCABAACAABCABCABAAACAABBCA",
   repeatingPatterns: "abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabc",
@@ -65,7 +64,6 @@ export default function TextCompressionPage() {
     }
   }, [])
 
-  // Update input text when sample is selected
   useEffect(() => {
     if (inputMethod === "sample" && selectedSample) {
       setInputText(sampleInputs[selectedSample as keyof typeof sampleInputs])
@@ -101,7 +99,6 @@ export default function TextCompressionPage() {
     if (!file) return
 
     try {
-      // Read file as text
       const text = await file.text()
       setInputText(text)
       toast.success(`File "${file.name}" loaded successfully`)

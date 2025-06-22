@@ -53,6 +53,7 @@ export function LZWVisualizer({
   const [decodeInput, setDecodeInput] = useState("")
   const [decodedOutput, setDecodedOutput] = useState("")
   const [activeDecodeTab, setActiveDecodeTab] = useState<"text" | "file">("text")
+  const [encodedOutputWithBits, setEncodedOutputWithBits] = useState<{ code: number, bits: number }[]>([])
 
   const animationTimerRef = useRef<NodeJS.Timeout | null>(null)
   const dictionaryContainerRef = useRef<HTMLDivElement>(null)
@@ -62,7 +63,6 @@ export function LZWVisualizer({
     if (!inputText || !hasCompressed) return
 
     if (animationStep === 1) {
-      // Initialize dictionary with ASCII characters (0-255)
       const initialDictionary = new Map<string, number>()
       for (let i = 0; i < 256; i++) {
         initialDictionary.set(String.fromCharCode(i), i)
@@ -88,7 +88,6 @@ export function LZWVisualizer({
     }
   }, [inputText, animationStep, hasCompressed])
 
-  // Handle animation step changes
   useEffect(() => {
     if (!hasCompressed) return
 
@@ -109,7 +108,6 @@ export function LZWVisualizer({
     }
   }, [animationStep, hasCompressed])
 
-  // LZW compression algorithm animation
   useEffect(() => {
     if (!hasCompressed || !isAnimating || animationStep !== 2 || !inputText) return
 
@@ -118,15 +116,19 @@ export function LZWVisualizer({
     const performLZWStep = () => {
       if (currentIndex >= inputText.length) {
         if (currentString) {
-          setEncodedOutput((prev) => {
-            const newOutput = [...prev, dictionary.get(currentString) || 0]
-            const compressedBits = newOutput.length * Math.ceil(Math.log2(dictionary.size))
+          const code = dictionary.get(currentString) || 0
+          const bitsNeeded = Math.ceil(Math.log2(dictionary.size || 1))
+
+          setEncodedOutput((prev) => [...prev, code])
+          setEncodedOutputWithBits((prev) => {
+            const newList = [...prev, { code, bits: bitsNeeded }]
+            const compressedBits = newList.reduce((sum, { bits }) => sum + bits, 0)
             setCompressionStats((prev) => ({
               ...prev,
               compressedBits,
               ratio: prev.originalBits / compressedBits,
             }))
-            return newOutput
+            return newList
           })
         }
 
@@ -147,10 +149,11 @@ export function LZWVisualizer({
         setCurrentString(stringPlusChar)
         setStepDescription(`"${stringPlusChar}" is already in the dictionary, continuing to the next character`)
       } else {
-        setEncodedOutput((prev) => {
-          const code = dictionary.get(currentString) || 0
-          return [...prev, code]
-        })
+        const code = dictionary.get(currentString) || 0
+        const bitsNeeded = Math.ceil(Math.log2(dictionary.size || 1))
+
+        setEncodedOutput((prev) => [...prev, code])
+        setEncodedOutputWithBits((prev) => [...prev, { code, bits: bitsNeeded }])
 
         setDictionary((prev) => {
           const newDict = new Map(prev)
@@ -159,14 +162,11 @@ export function LZWVisualizer({
         })
 
         setStepDescription(
-          `Adding "${stringPlusChar}" to dictionary with code ${dictionary.size}, outputting code for "${currentString}"`,
+          `Adding "${stringPlusChar}" to dictionary with code ${dictionary.size}, outputting code for "${currentString}"`
         )
-
-        // Reset current string to the current character
         setCurrentString(char)
       }
 
-      // Move to the next character
       setCurrentIndex((prev) => prev + 1)
     }
 
@@ -189,9 +189,8 @@ export function LZWVisualizer({
     onStepChange,
   ])
 
-  // LZW decoding function
+
   const decodeLZW = (encodedData: number[]): string => {
-    // Initialize dictionary (same as in encoding)
     const dictionary: string[] = []
     for (let i = 0; i < 256; i++) {
       dictionary[i] = String.fromCharCode(i)
@@ -254,10 +253,11 @@ export function LZWVisualizer({
         setCurrentString(stringPlusChar)
         setStepDescription(`"${stringPlusChar}" is already in the dictionary, continuing to the next character`)
       } else {
-        setEncodedOutput((prev) => {
-          const code = dictionary.get(currentString) || 0
-          return [...prev, code]
-        })
+        const code = dictionary.get(currentString) || 0
+        const bitsNeeded = Math.ceil(Math.log2(dictionary.size || 1))
+
+        setEncodedOutput((prev) => [...prev, code])
+        setEncodedOutputWithBits((prev) => [...prev, { code, bits: bitsNeeded }])
 
         setDictionary((prev) => {
           const newDict = new Map(prev)
@@ -266,23 +266,28 @@ export function LZWVisualizer({
         })
 
         setStepDescription(
-          `Adding "${stringPlusChar}" to dictionary with code ${dictionary.size}, outputting code for "${currentString}"`,
+          `Adding "${stringPlusChar}" to dictionary with code ${dictionary.size}, outputting code for "${currentString}"`
         )
         setCurrentString(char)
       }
 
       setCurrentIndex((prev) => prev + 1)
     } else if (currentString) {
-      setEncodedOutput((prev) => {
-        const newOutput = [...prev, dictionary.get(currentString) || 0]
-        const compressedBits = newOutput.length * Math.ceil(Math.log2(dictionary.size))
+      const code = dictionary.get(currentString) || 0
+      const bitsNeeded = Math.ceil(Math.log2(dictionary.size || 1))
+
+      setEncodedOutput((prev) => [...prev, code])
+      setEncodedOutputWithBits((prev) => {
+        const finalList = [...prev, { code, bits: bitsNeeded }]
+        const compressedBits = finalList.reduce((sum, { bits }) => sum + bits, 0)
         setCompressionStats((prev) => ({
           ...prev,
           compressedBits,
           ratio: prev.originalBits / compressedBits,
         }))
-        return newOutput
+        return finalList
       })
+
       setCurrentString("")
 
       if (onStepChange) {
@@ -291,48 +296,59 @@ export function LZWVisualizer({
     }
   }
 
+
   const handleFinish = () => {
-    const tempDict = new Map(dictionary)
-    const tempOutput: number[] = [...encodedOutput]
-    let tempString = ''
-    const input = inputText
-    let idx = currentIndex
+  const tempDict = new Map(dictionary)
+  const tempOutput: number[] = [...encodedOutput]
+  const tempWithBits: { code: number, bits: number }[] = [...encodedOutputWithBits]
 
-    while (idx < input.length) {
-      let nextStr = tempString + input[idx]
-      while (tempDict.has(nextStr) && idx < input.length) {
-        tempString = nextStr
-        idx++
-        nextStr = tempString + input[idx]
-      }
+  let tempString = ''
+  const input = inputText
+  let idx = currentIndex
 
-      if (tempString) {
-        tempOutput.push(tempDict.get(tempString)!)
-      }
-      if (idx < input.length) {
-        tempDict.set(nextStr, tempDict.size)
-        tempString = input[idx]
-        idx++
-      }
+  while (idx < input.length) {
+    let nextStr = tempString + input[idx]
+    while (tempDict.has(nextStr) && idx < input.length) {
+      tempString = nextStr
+      idx++
+      nextStr = tempString + input[idx]
     }
 
     if (tempString) {
-      tempOutput.push(tempDict.get(tempString)!)
+      const code = tempDict.get(tempString)!
+      const bits = Math.ceil(Math.log2(tempDict.size || 1))
+      tempOutput.push(code)
+      tempWithBits.push({ code, bits })
     }
 
-    setCurrentIndex(input.length)
-    setDictionary(tempDict)
-    setEncodedOutput(tempOutput)
-
-    const compressedBits = tempOutput.length * Math.ceil(Math.log2(tempDict.size))
-    setCompressionStats((prev) => ({
-      ...prev,
-      compressedBits,
-      ratio: prev.originalBits / compressedBits,
-    }))
-
-    onStepChange?.(3)
+    if (idx < input.length) {
+      tempDict.set(nextStr, tempDict.size)
+      tempString = input[idx]
+      idx++
+    }
   }
+
+  if (tempString) {
+    const code = tempDict.get(tempString)!
+    const bits = Math.ceil(Math.log2(tempDict.size || 1))
+    tempOutput.push(code)
+    tempWithBits.push({ code, bits })
+  }
+
+  const compressedBits = tempWithBits.reduce((sum, { bits }) => sum + bits, 0)
+
+  setCurrentIndex(input.length)
+  setDictionary(tempDict)
+  setEncodedOutput(tempOutput)
+  setEncodedOutputWithBits(tempWithBits)
+  setCompressionStats((prev) => ({
+    ...prev,
+    compressedBits,
+    ratio: prev.originalBits / compressedBits,
+  }))
+
+  onStepChange?.(3)
+}
 
   const handleResetStep = () => {
     setCurrentIndex(0)
@@ -340,7 +356,6 @@ export function LZWVisualizer({
     setNextChar(inputText[0] || "")
     setEncodedOutput([])
 
-    // Reset dictionary to initial state
     const initialDictionary = new Map<string, number>()
     for (let i = 0; i < 256; i++) {
       initialDictionary.set(String.fromCharCode(i), i)
